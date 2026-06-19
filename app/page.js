@@ -255,6 +255,8 @@ export default function DemoCentral() {
         // Check for an incoming song via URL params (from the bounce prompt)
         try {
           const params = new URLSearchParams(window.location.search);
+
+          // Single song import (from bounce prompt)
           if (params.get("import") === "1") {
             const incoming = {
               id: params.get("id") || Date.now().toString(),
@@ -275,7 +277,18 @@ export default function DemoCentral() {
             if (!alreadyExists) {
               browserSongs = [incoming, ...browserSongs];
             }
-            // Clean the URL so refreshing doesn't re-import
+            window.history.replaceState({}, "", window.location.pathname);
+          }
+
+          // Batch import (from the demo importer script)
+          if (params.get("batchimport") === "1") {
+            const dataParam = params.get("data");
+            if (dataParam) {
+              const decoded = JSON.parse(decodeURIComponent(atob(dataParam)));
+              const existingIds = new Set(browserSongs.map(s => s.id));
+              const newOnes = decoded.filter(s => !existingIds.has(s.id));
+              browserSongs = [...newOnes, ...browserSongs];
+            }
             window.history.replaceState({}, "", window.location.pathname);
           }
         } catch {}
