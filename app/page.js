@@ -227,9 +227,68 @@ function Modal({ song, onSave, onClose, onDelete }) {
   );
 }
 
+function ImportModal({ onClose, onImport }) {
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+
+  function handleImport() {
+    try {
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) {
+        setError("Expected a list of songs (JSON array).");
+        return;
+      }
+      onImport(parsed);
+    } catch (e) {
+      setError("Couldn't parse that as JSON. Check it's valid and try again.");
+    }
+  }
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      zIndex: 100, padding: 16
+    }}>
+      <div style={{
+        background: "#fff", borderRadius: 12, width: "100%", maxWidth: 560,
+        padding: 24, boxShadow: "0 20px 60px rgba(0,0,0,0.25)"
+      }}>
+        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6 }}>Bulk Import Songs</div>
+        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>
+          Paste the JSON from your import script below, then hit Import.
+        </div>
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder='[ { "title": "...", "bpm": "...", ... } ]'
+          style={{
+            width: "100%", minHeight: 220, padding: 10,
+            border: "1px solid #e2e8f0", borderRadius: 8,
+            fontSize: 12, fontFamily: "monospace", color: "#0f172a",
+            outline: "none", resize: "vertical", boxSizing: "border-box"
+          }}
+        />
+        {error && <div style={{ color: "#dc2626", fontSize: 12, marginTop: 8 }}>{error}</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button onClick={onClose} style={{
+            background: "#fff", color: "#64748b", border: "1px solid #e2e8f0",
+            padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600
+          }}>Cancel</button>
+          <button onClick={handleImport} style={{
+            background: "#0f172a", color: "#fff", border: "none",
+            padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 700
+          }}>Import ✓</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DemoCentral() {
   const [songs, setSongs] = useState([]);
   const [modal, setModal] = useState(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [filterStage, setFilterStage] = useState("all");
   const [filterPitch, setFilterPitch] = useState("all");
   const [search, setSearch] = useState("");
@@ -255,8 +314,6 @@ export default function DemoCentral() {
         // Check for an incoming song via URL params (from the bounce prompt)
         try {
           const params = new URLSearchParams(window.location.search);
-
-          // Single song import (from bounce prompt)
           if (params.get("import") === "1") {
             const incoming = {
               id: params.get("id") || Date.now().toString(),
@@ -276,18 +333,6 @@ export default function DemoCentral() {
             const alreadyExists = browserSongs.some(s => s.id === incoming.id);
             if (!alreadyExists) {
               browserSongs = [incoming, ...browserSongs];
-            }
-            window.history.replaceState({}, "", window.location.pathname);
-          }
-
-          // Batch import (from the demo importer script)
-          if (params.get("batchimport") === "1") {
-            const dataParam = params.get("data");
-            if (dataParam) {
-              const decoded = JSON.parse(decodeURIComponent(atob(dataParam)));
-              const existingIds = new Set(browserSongs.map(s => s.id));
-              const newOnes = decoded.filter(s => !existingIds.has(s.id));
-              browserSongs = [...newOnes, ...browserSongs];
             }
             window.history.replaceState({}, "", window.location.pathname);
           }
@@ -360,12 +405,33 @@ export default function DemoCentral() {
           <span style={{ fontWeight: 800, fontSize: 15, letterSpacing: "-0.02em" }}>Song Central</span>
           <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>{songs.length} songs</span>
         </div>
-        <button onClick={() => setModal({ ...EMPTY_SONG })} style={{
-          background: "#0f172a", color: "#fff", border: "none",
-          padding: "7px 14px", borderRadius: 6, cursor: "pointer",
-          fontSize: 12, fontWeight: 700, letterSpacing: "0.02em"
-        }}>+ Add Song</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setImportModalOpen(true)} style={{
+            background: "#fff", color: "#475569", border: "1px solid #e2e8f0",
+            padding: "7px 14px", borderRadius: 6, cursor: "pointer",
+            fontSize: 12, fontWeight: 700, letterSpacing: "0.02em"
+          }}>⇪ Import</button>
+          <button onClick={() => setModal({ ...EMPTY_SONG })} style={{
+            background: "#0f172a", color: "#fff", border: "none",
+            padding: "7px 14px", borderRadius: 6, cursor: "pointer",
+            fontSize: 12, fontWeight: 700, letterSpacing: "0.02em"
+          }}>+ Add Song</button>
+        </div>
       </div>
+
+      {importModalOpen && (
+        <ImportModal
+          onClose={() => setImportModalOpen(false)}
+          onImport={(newSongs) => {
+            setSongs(prev => {
+              const existingIds = new Set(prev.map(s => s.id));
+              const toAdd = newSongs.filter(s => !existingIds.has(s.id));
+              return [...toAdd, ...prev];
+            });
+            setImportModalOpen(false);
+          }}
+        />
+      )}
 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px" }}>
 
