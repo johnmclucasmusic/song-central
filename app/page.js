@@ -252,26 +252,35 @@ export default function DemoCentral() {
           }
         } catch {}
 
-        // Also load from local bridge server (songs logged via bounce prompt)
-        let serverSongs = [];
+        // Check for an incoming song via URL params (from the bounce prompt)
         try {
-          const response = await fetch("http://localhost:47432/songs", {
-            signal: AbortSignal.timeout(2000)
-          });
-          if (response.ok) {
-            const data = await response.json();
-            serverSongs = data.map(s => ({
-              ...s,
-              pitchTargets: s.pitchTargets || (s.pitchTarget ? [s.pitchTarget] : [])
-            }));
+          const params = new URLSearchParams(window.location.search);
+          if (params.get("import") === "1") {
+            const incoming = {
+              id: params.get("id") || Date.now().toString(),
+              title: params.get("title") || "",
+              bpm: params.get("bpm") || "",
+              key: params.get("key") || "",
+              stage: params.get("stage") || "01",
+              collaborators: params.get("collaborators") || "",
+              artist: params.get("artist") || "",
+              pitchTargets: params.get("pitchTargets")
+                ? params.get("pitchTargets").split(",").filter(Boolean)
+                : [],
+              notes: params.get("notes") || "",
+              splits: "",
+              disco: false,
+            };
+            const alreadyExists = browserSongs.some(s => s.id === incoming.id);
+            if (!alreadyExists) {
+              browserSongs = [incoming, ...browserSongs];
+            }
+            // Clean the URL so refreshing doesn't re-import
+            window.history.replaceState({}, "", window.location.pathname);
           }
         } catch {}
 
-        // Merge: avoid duplicates by id
-        const browserIds = new Set(browserSongs.map(s => s.id));
-        const newFromServer = serverSongs.filter(s => !browserIds.has(s.id));
-        const merged = [...browserSongs, ...newFromServer];
-        setSongs(merged);
+        setSongs(browserSongs);
       } catch {}
       setLoaded(true);
     })();
