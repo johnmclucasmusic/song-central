@@ -16,19 +16,12 @@ const STAGES = [
 ];
 
 const PITCH_TARGETS = ["Korea", "Sync", "Artist"];
-const ACTIVE_STAGES = ["01", "02", "03", "04", "05", "06"];
 
 const EMPTY_SONG = {
   id: null, title: "", bpm: "", key: "", collaborators: "",
   artist: "", pitchTargets: [], splits: "", discoStatus: false,
   stage: "01", notes: "", dateAdded: "", lastUpdated: "",
 };
-
-function daysSince(dateStr) {
-  if (!dateStr) return null;
-  const diff = Date.now() - new Date(dateStr).getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24));
-}
 
 function StageTag({ stageId }) {
   const stage = STAGES.find(s => s.id === stageId);
@@ -42,21 +35,6 @@ function StageTag({ stageId }) {
     }}>
       <span style={{ fontFamily: "monospace", opacity: 0.7 }}>{stage.id}</span>
       {stage.label}
-    </span>
-  );
-}
-
-function StaleBadge({ days }) {
-  if (days === null || days < 14) return null;
-  const hot = days >= 60;
-  return (
-    <span style={{
-      padding: "2px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700,
-      background: hot ? "#fef2f2" : "#fffbeb",
-      color: hot ? "#dc2626" : "#b45309",
-      border: `1px solid ${hot ? "#fca5a5" : "#fcd34d"}`,
-    }}>
-      {days}d stale
     </span>
   );
 }
@@ -292,7 +270,8 @@ export default function DemoCentral() {
   const [filterStage, setFilterStage] = useState("all");
   const [filterPitch, setFilterPitch] = useState("all");
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState("stale");
+  const [sortBy, setSortBy] = useState("stage");
+  const [sortDir, setSortDir] = useState("asc");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -372,17 +351,12 @@ export default function DemoCentral() {
       s.collaborators?.toLowerCase().includes(search.toLowerCase()) ||
       s.artist?.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
-      if (sortBy === "stale") return (daysSince(b.lastUpdated) || 0) - (daysSince(a.lastUpdated) || 0);
-      if (sortBy === "stage") return a.stage.localeCompare(b.stage, undefined, { numeric: true });
-      if (sortBy === "newest") return new Date(b.dateAdded) - new Date(a.dateAdded);
-      if (sortBy === "title") return a.title.localeCompare(b.title);
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortBy === "stage") return dir * a.stage.localeCompare(b.stage, undefined, { numeric: true });
+      if (sortBy === "newest") return dir * (new Date(a.dateAdded) - new Date(b.dateAdded));
+      if (sortBy === "title") return dir * a.title.localeCompare(b.title);
       return 0;
     });
-
-  const needsAction = songs.filter(s => {
-    const days = daysSince(s.lastUpdated);
-    return ACTIVE_STAGES.includes(s.stage) && days !== null && days >= 14;
-  });
 
   const stageCounts = STAGES.reduce((acc, s) => {
     acc[s.id] = songs.filter(x => x.stage === s.id).length;
@@ -435,26 +409,6 @@ export default function DemoCentral() {
 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px" }}>
 
-        {/* Needs Action Banner */}
-        {needsAction.length > 0 && (
-          <div style={{
-            background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 10,
-            padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap"
-          }}>
-            <span style={{ fontSize: 18 }}>⚠️</span>
-            <div>
-              <span style={{ fontWeight: 700, color: "#92400e", fontSize: 13 }}>
-                {needsAction.length} song{needsAction.length > 1 ? "s" : ""} need attention —
-              </span>
-              <span style={{ color: "#b45309", fontSize: 13 }}> stuck in active stages for 14+ days</span>
-            </div>
-            <button onClick={() => { setFilterStage("all"); setSortBy("stale"); }}
-              style={{ marginLeft: "auto", background: "#92400e", color: "#fff", border: "none", padding: "5px 12px", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-              Show oldest first
-            </button>
-          </div>
-        )}
-
         {/* Pipeline summary */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(95px, 1fr))", gap: 8, marginBottom: 24 }}>
           {STAGES.map(s => (
@@ -487,11 +441,20 @@ export default function DemoCentral() {
           </select>
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
             style={{ padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, fontFamily: "inherit", background: "#fff", color: "#0f172a" }}>
-            <option value="stale">Sort: Most stale</option>
-            <option value="stage">Sort: Stage 01 → 99</option>
-            <option value="newest">Sort: Newest first</option>
-            <option value="title">Sort: A–Z</option>
+            <option value="stage">Sort: Stage</option>
+            <option value="newest">Sort: Date added</option>
+            <option value="title">Sort: Title A–Z</option>
           </select>
+          <button onClick={() => setSortDir(d => d === "asc" ? "desc" : "asc")}
+            title="Reverse sort order"
+            style={{
+              padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12,
+              fontFamily: "inherit", background: "#fff", color: "#0f172a", cursor: "pointer", fontWeight: 600
+            }}>
+            {sortBy === "stage"
+              ? (sortDir === "asc" ? "Early → Late" : "Late → Early")
+              : (sortDir === "asc" ? "▲ Asc" : "▼ Desc")}
+          </button>
         </div>
 
         {/* Song table */}
@@ -508,31 +471,28 @@ export default function DemoCentral() {
         ) : (
           <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 10, overflow: "hidden" }}>
             <div style={{
-              display: "grid", gridTemplateColumns: "2fr 1.2fr 90px 1fr 1.2fr 65px 55px",
+              display: "grid", gridTemplateColumns: "2fr 1.2fr 90px 1fr 1.2fr 55px",
               padding: "10px 16px", background: "#f8fafc",
               borderBottom: "1px solid #e2e8f0", gap: 12
             }}>
-              {["Title", "Stage", "BPM / Key", "Collaborators", "Targets", "Stale", "Disco"].map(h => (
+              {["Title", "Stage", "BPM / Key", "Collaborators", "Targets", "Disco"].map(h => (
                 <div key={h} style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>
               ))}
             </div>
 
             {filtered.map((song, i) => {
-              const days = daysSince(song.lastUpdated);
-              const isStale = days !== null && days >= 14;
-              const activeStage = ACTIVE_STAGES.includes(song.stage);
               const targets = song.pitchTargets || [];
               return (
                 <div key={song.id} onClick={() => setModal(song)}
                   style={{
-                    display: "grid", gridTemplateColumns: "2fr 1.2fr 90px 1fr 1.2fr 65px 55px",
+                    display: "grid", gridTemplateColumns: "2fr 1.2fr 90px 1fr 1.2fr 55px",
                     padding: "12px 16px", gap: 12, alignItems: "center",
                     borderBottom: i < filtered.length - 1 ? "1px solid #f1f5f9" : "none",
-                    cursor: "pointer", background: isStale && activeStage ? "#fffdf5" : "#fff",
+                    cursor: "pointer", background: "#fff",
                     transition: "background 0.1s"
                   }}
                   onMouseEnter={e => e.currentTarget.style.background = "#f8fafc"}
-                  onMouseLeave={e => e.currentTarget.style.background = isStale && activeStage ? "#fffdf5" : "#fff"}
+                  onMouseLeave={e => e.currentTarget.style.background = "#fff"}
                 >
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 13, color: "#0f172a" }}>{song.title || "Untitled"}</div>
@@ -558,7 +518,6 @@ export default function DemoCentral() {
                         }}>{t}</span>
                       ))}
                   </div>
-                  <div><StaleBadge days={days} /></div>
                   <div style={{ textAlign: "center" }}>
                     {song.discoStatus
                       ? <span style={{ fontSize: 14, color: "#1d4ed8" }}>✓</span>
